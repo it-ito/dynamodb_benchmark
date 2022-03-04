@@ -163,19 +163,54 @@ func (c *DynamoDBBenchmark) startWriteWorker(id int, wg *sync.WaitGroup, success
 			},
 		}
 	}
+	// 上記param一旦直接埋め込んでいます
+
+	twii := &dynamodb.TransactWriteItemsInput{
+		TransactItems: []*dynamodb.TransactWriteItem{
+			&dynamodb.TransactWriteItem{
+				Update: &dynamodb.Update{
+					TableName: &c.TableName,
+					Key: map[string]*dynamodb.AttributeValue{
+						"id": {
+							S: aws.String(c.Id),
+						},
+					},
+					UpdateExpression: aws.String("set age = age + :age_increment_value, version = version + :version_increment_value, stock = stock - :stock_decrement_value"),
+					// ReturnValues:     aws.String("ALL_NEW"),
+					ConditionExpression: aws.String("stock > 0"),
+					ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+						":age_increment_value": {
+							N: aws.String("1"),
+						},
+						":version_increment_value": {
+							N: aws.String("1"),
+						},
+						":stock_decrement_value": {
+							N: aws.String("1"),
+						},
+						// ":age_max_value": {
+						// 	N: aws.String(strconv.Itoa(c.Condition)),
+						// },
+					},
+				},
+			},
+		},
+		// ClientRequestToken: clientRequestToken,
+	}
 	for i := 1; i <= c.NumCalls; i++ {
 		//if c.Verbose {
 		//	fmt.Printf("[Verbose] Mssage: PartitionKey %s Data %s\n", c.PartitionKey, message)
 		//}
 		err := retry(c.RetryNum, 2*time.Second, func() (err error) {
-			dresp, derr := db.UpdateItem(param)
+			_, derr := db.TransactWriteItems(twii)
 			if c.Verbose {
 				item := Item{}
-				derr := dynamodbattribute.UnmarshalMap(dresp.Attributes, &item)
-				if derr != nil {
-					fmt.Printf("Got error unmarshalling: %s", derr)
-					return derr
-				}
+				// UpdateItemInput -> Updateに変えたことで取得できなくなっている部分を一旦コメントアウト
+				// derr := dynamodbattribute.UnmarshalMap(dresp.Attributes, &item)
+				// if derr != nil {
+				// 	fmt.Printf("Got error unmarshalling: %s", derr)
+				// 	return derr
+				// }
 				fmt.Printf("[Verbose] DynamoDB UpdateImte Response: id %s age %d\n", item.Id, item.Age)
 			}
 			return derr
