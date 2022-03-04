@@ -57,6 +57,8 @@ type DynamoDBBenchmark struct {
 type Item struct {
 	Id  string `json:"id"`
 	Age int64  `json:"age"`
+	Stock int64  `json:"stock"`
+	Version int64  `json:"version"`
 }
 
 func retry(attempts int, sleep time.Duration, f func() error) (err error) {
@@ -129,13 +131,19 @@ func (c *DynamoDBBenchmark) startWriteWorker(id int, wg *sync.WaitGroup, success
 				S: aws.String(c.Id),
 			},
 		},
-		UpdateExpression: aws.String("set age = age + :age_increment_value"),
+		UpdateExpression: aws.String("set age = age + :age_increment_value, version = version + :version_increment_value, stock = stock - :stock_decrement_value"),
 		ReturnValues:     aws.String("ALL_NEW"),
 	}
 	if c.Condition > 0 {
 		param.ConditionExpression = aws.String("age < :age_max_value")
 		param.ExpressionAttributeValues = map[string]*dynamodb.AttributeValue{
 			":age_increment_value": {
+				N: aws.String("1"),
+			},
+			":version_increment_value": {
+				N: aws.String("1"),
+			},
+			":stock_decrement_value": {
 				N: aws.String("1"),
 			},
 			":age_max_value": {
@@ -145,6 +153,12 @@ func (c *DynamoDBBenchmark) startWriteWorker(id int, wg *sync.WaitGroup, success
 	} else {
 		param.ExpressionAttributeValues = map[string]*dynamodb.AttributeValue{
 			":age_increment_value": {
+				N: aws.String("1"),
+			},
+			":version_increment_value": {
+				N: aws.String("1"),
+			},
+			":stock_decrement_value": {
 				N: aws.String("1"),
 			},
 		}
@@ -200,7 +214,7 @@ func (c *DynamoDBBenchmark) startReadWorker(id int, wg *sync.WaitGroup, successC
 					fmt.Printf("Got error unmarshalling: %s", derr)
 					return derr
 				}
-				fmt.Printf("[Verbose] DynamoDB GetImte Response: id %s age %d\n", item.Id, item.Age)
+				fmt.Printf("[Verbose] DynamoDB GetImte Response: id %s age %d stock %d version %d\n", item.Id, item.Age, item.Stock, item.Version)
 			}
 			return derr
 		})

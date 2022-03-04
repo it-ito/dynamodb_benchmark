@@ -35,6 +35,9 @@ Options:
 type Item struct {
 	Id  string `json:"id"`
 	Age int64  `json:"age"`
+	Stock int64  `json:"stock"`
+	Version int64  `json:"version"`
+
 }
 
 func getDynamoDBClient(endpointUrl string) *dynamodb.DynamoDB {
@@ -79,11 +82,13 @@ func CreateTable(db dynamodbiface.DynamoDBAPI, tableName *string) error {
 	return err
 }
 
-func CreateItem(db dynamodbiface.DynamoDBAPI, tableName *string, id *string) error {
+func CreateItem(db dynamodbiface.DynamoDBAPI, tableName *string, id *string, stock *int64) error {
 
 	item := Item{
 		Id:  *id,
 		Age: 1,
+		Stock: *stock,
+		Version: 0,
 	}
 	av, err := dynamodbattribute.MarshalMap(item)
 	if err != nil {
@@ -144,6 +149,7 @@ func main() {
 		id          string
 		endpointUrl string
 		verbose     bool
+		stock       int64
 	)
 
 	flag.StringVar(&action, "a", "read", "(Required) read or write")
@@ -151,6 +157,7 @@ func main() {
 	flag.StringVar(&endpointUrl, "endpoint-url", "", "The URL to send the API request to")
 	flag.StringVar(&id, "id", "", "(Required) id field value in the table")
 	flag.BoolVar(&verbose, "verbose", false, "Verbose option")
+	flag.Int64Var(&stock, "stock", 100, "(Required) id field value in the table")
 	flag.Usage = usage
 	flag.Parse()
 
@@ -175,7 +182,7 @@ func main() {
 	case "create-table":
 		err = CreateTable(db, &tableName)
 	case "create-item":
-		err = CreateItem(db, &tableName, &id)
+		err = CreateItem(db, &tableName, &id, &stock)
 	case "delete-item":
 		err = DeleteItem(db, &tableName, &id)
 	case "get-item":
