@@ -42,6 +42,8 @@ Options:
 -h                   help message
 `
 
+var unixTime = time.Now().Unix()
+
 type DynamoDBBenchmark struct {
 	Action      string
 	TableName   string
@@ -165,6 +167,9 @@ func (c *DynamoDBBenchmark) startWriteWorker(id int, wg *sync.WaitGroup, success
 	}
 	// 上記param一旦直接埋め込んでいます
 
+	// clientRequestTokenは毎回変更され、同じスレッドは同じトークンになるように
+	clientRequestToken := strconv.FormatInt(unixTime, 10) + "_" + strconv.Itoa(id)
+
 	twii := &dynamodb.TransactWriteItemsInput{
 		TransactItems: []*dynamodb.TransactWriteItem{
 			&dynamodb.TransactWriteItem{
@@ -177,7 +182,7 @@ func (c *DynamoDBBenchmark) startWriteWorker(id int, wg *sync.WaitGroup, success
 					},
 					UpdateExpression: aws.String("set age = age + :age_increment_value, version = version + :version_increment_value, stock = stock - :stock_decrement_value"),
 					// ReturnValues:     aws.String("ALL_NEW"),
-					ConditionExpression: aws.String("stock > 0"),
+					ConditionExpression: aws.String("stock > :stock_min_value"),
 					ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 						":age_increment_value": {
 							N: aws.String("1"),
@@ -188,6 +193,9 @@ func (c *DynamoDBBenchmark) startWriteWorker(id int, wg *sync.WaitGroup, success
 						":stock_decrement_value": {
 							N: aws.String("1"),
 						},
+						":stock_min_value": {
+							N: aws.String("0"),
+						},
 						// ":age_max_value": {
 						// 	N: aws.String(strconv.Itoa(c.Condition)),
 						// },
@@ -195,7 +203,7 @@ func (c *DynamoDBBenchmark) startWriteWorker(id int, wg *sync.WaitGroup, success
 				},
 			},
 		},
-		// ClientRequestToken: clientRequestToken,
+		ClientRequestToken: aws.String(clientRequestToken),
 	}
 	for i := 1; i <= c.NumCalls; i++ {
 		//if c.Verbose {

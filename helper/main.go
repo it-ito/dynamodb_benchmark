@@ -67,16 +67,18 @@ func CreateTable(db dynamodbiface.DynamoDBAPI, tableName *string) error {
 			KeyType:       aws.String("HASH"),
 		},
 	}
+	billingMode := aws.String(dynamodb.BillingModePayPerRequest)
 
-	provisionedThroughput := &dynamodb.ProvisionedThroughput{
-		ReadCapacityUnits:  aws.Int64(10),
-		WriteCapacityUnits: aws.Int64(10),
-	}
+	// provisionedThroughput := &dynamodb.ProvisionedThroughput{
+	// 	ReadCapacityUnits:  aws.Int64(10),
+	// 	WriteCapacityUnits: aws.Int64(10),
+	// }
 
 	_, err := db.CreateTable(&dynamodb.CreateTableInput{
 		AttributeDefinitions:  attributeDefinitions,
 		KeySchema:             keySchema,
-		ProvisionedThroughput: provisionedThroughput,
+		// ProvisionedThroughput: provisionedThroughput,
+		BillingMode:           billingMode,
 		TableName:             tableName,
 	})
 	return err
