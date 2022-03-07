@@ -126,45 +126,45 @@ func (c *DynamoDBBenchmark) startWriteWorker(id int, wg *sync.WaitGroup, success
 
 	db := getDynamoDBClient(c.EndpointUrl)
 
-	param := &dynamodb.UpdateItemInput{
-		TableName: &c.TableName,
-		Key: map[string]*dynamodb.AttributeValue{
-			"id": {
-				S: aws.String(c.Id),
-			},
-		},
-		UpdateExpression: aws.String("set age = age + :age_increment_value, version = version + :version_increment_value, stock = stock - :stock_decrement_value"),
-		ReturnValues:     aws.String("ALL_NEW"),
-	}
-	if c.Condition > 0 {
-		param.ConditionExpression = aws.String("age < :age_max_value")
-		param.ExpressionAttributeValues = map[string]*dynamodb.AttributeValue{
-			":age_increment_value": {
-				N: aws.String("1"),
-			},
-			":version_increment_value": {
-				N: aws.String("1"),
-			},
-			":stock_decrement_value": {
-				N: aws.String("1"),
-			},
-			":age_max_value": {
-				N: aws.String(strconv.Itoa(c.Condition)),
-			},
-		}
-	} else {
-		param.ExpressionAttributeValues = map[string]*dynamodb.AttributeValue{
-			":age_increment_value": {
-				N: aws.String("1"),
-			},
-			":version_increment_value": {
-				N: aws.String("1"),
-			},
-			":stock_decrement_value": {
-				N: aws.String("1"),
-			},
-		}
-	}
+	// param := &dynamodb.UpdateItemInput{
+	// 	TableName: &c.TableName,
+	// 	Key: map[string]*dynamodb.AttributeValue{
+	// 		"id": {
+	// 			S: aws.String(c.Id),
+	// 		},
+	// 	},
+	// 	UpdateExpression: aws.String("set age = age + :age_increment_value, version = version + :version_increment_value, stock = stock - :stock_decrement_value"),
+	// 	ReturnValues:     aws.String("ALL_NEW"),
+	// }
+	// if c.Condition > 0 {
+	// 	param.ConditionExpression = aws.String("age < :age_max_value")
+	// 	param.ExpressionAttributeValues = map[string]*dynamodb.AttributeValue{
+	// 		":age_increment_value": {
+	// 			N: aws.String("1"),
+	// 		},
+	// 		":version_increment_value": {
+	// 			N: aws.String("1"),
+	// 		},
+	// 		":stock_decrement_value": {
+	// 			N: aws.String("1"),
+	// 		},
+	// 		":age_max_value": {
+	// 			N: aws.String(strconv.Itoa(c.Condition)),
+	// 		},
+	// 	}
+	// } else {
+	// 	param.ExpressionAttributeValues = map[string]*dynamodb.AttributeValue{
+	// 		":age_increment_value": {
+	// 			N: aws.String("1"),
+	// 		},
+	// 		":version_increment_value": {
+	// 			N: aws.String("1"),
+	// 		},
+	// 		":stock_decrement_value": {
+	// 			N: aws.String("1"),
+	// 		},
+	// 	}
+	// }
 	// 上記param一旦直接埋め込んでいます
 
 	// clientRequestTokenは毎回変更され、同じスレッドは同じトークンになるように
