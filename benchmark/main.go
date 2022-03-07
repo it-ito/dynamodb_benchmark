@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -57,9 +58,9 @@ type DynamoDBBenchmark struct {
 }
 
 type Item struct {
-	Id  string `json:"id"`
-	Age int64  `json:"age"`
-	Stock int64  `json:"stock"`
+	Id      string `json:"id"`
+	Age     int64  `json:"age"`
+	Stock   int64  `json:"stock"`
 	Version int64  `json:"version"`
 }
 
@@ -96,6 +97,7 @@ func (c *DynamoDBBenchmark) Run() {
 	successCount := uint32(0)
 	errorCount := uint32(0)
 	startTime := time.Now()
+	var lastSuccessedTimeNanoUnix int64
 
 	var wg sync.WaitGroup
 	for i := 1; i <= c.Connections; i++ {
@@ -103,13 +105,19 @@ func (c *DynamoDBBenchmark) Run() {
 		if c.Action == "read" {
 			go c.startReadWorker(i, &wg, &successCount, &errorCount)
 		} else {
-			go c.startWriteWorker(i, &wg, &successCount, &errorCount)
+			go c.startWriteWorker(i, &wg, &successCount, &errorCount, &lastSuccessedTimeNanoUnix)
 		}
 	}
 	wg.Wait()
 
-	duration := time.Since(startTime).Seconds()
-	duration_ms := time.Since(startTime).Milliseconds()
+	if lastSuccessedTimeNanoUnix == 0 {
+		lastSuccessedTimeNanoUnix  = time.Now().UnixNano()
+	}
+	lastSuccessedTime := time.Unix(lastSuccessedTimeNanoUnix/1000000000, lastSuccessedTimeNanoUnix%1000000000)
+	duration := lastSuccessedTime.Sub(startTime).Seconds()
+	duration_ms := lastSuccessedTime.Sub(startTime).Milliseconds()
+	// duration := time.Since(startTime).Seconds()
+	// duration_ms := time.Since(startTime).Milliseconds()
 	average_ms := duration_ms / (int64(successCount) + int64(errorCount))
 
 	fmt.Println("-----------------------")
@@ -121,7 +129,7 @@ func (c *DynamoDBBenchmark) Run() {
 	fmt.Printf("Average (ms): %v\n", average_ms)
 }
 
-func (c *DynamoDBBenchmark) startWriteWorker(id int, wg *sync.WaitGroup, successCount *uint32, errorCount *uint32) {
+func (c *DynamoDBBenchmark) startWriteWorker(id int, wg *sync.WaitGroup, successCount *uint32, errorCount *uint32, lastSuccessedTimeNanoUnix *int64) {
 	defer wg.Done()
 
 	db := getDynamoDBClient(c.EndpointUrl)
@@ -225,12 +233,16 @@ func (c *DynamoDBBenchmark) startWriteWorker(id int, wg *sync.WaitGroup, success
 		})
 
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
+			// 在庫0件になってからのconditional error は表示しない
+			if !strings.Contains(err.Error(), "The conditional request failed") {
+				fmt.Printf("Error: %v\n", err)
+			}
 			atomic.AddUint32(errorCount, 1)
 			continue
 		}
 
 		atomic.AddUint32(successCount, 1)
+		atomic.StoreInt64(lastSuccessedTimeNanoUnix, time.Now().UnixNano())
 	}
 }
 
