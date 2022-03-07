@@ -167,50 +167,50 @@ func (c *DynamoDBBenchmark) startWriteWorker(id int, wg *sync.WaitGroup, success
 	// }
 	// 上記param一旦直接埋め込んでいます
 
-	// clientRequestTokenは毎回変更され、同じスレッドは同じトークンになるように
-	clientRequestToken := strconv.FormatInt(unixTime, 10) + "_" + strconv.Itoa(id)
-
-	twii := &dynamodb.TransactWriteItemsInput{
-		TransactItems: []*dynamodb.TransactWriteItem{
-			&dynamodb.TransactWriteItem{
-				Update: &dynamodb.Update{
-					TableName: &c.TableName,
-					Key: map[string]*dynamodb.AttributeValue{
-						"id": {
-							S: aws.String(c.Id),
+	twii := func(i int) *dynamodb.TransactWriteItemsInput {
+		clientRequestToken := strconv.FormatInt(unixTime, 10) + "_" + strconv.Itoa(id) + "_" + strconv.Itoa(i)
+		return &dynamodb.TransactWriteItemsInput{
+			TransactItems: []*dynamodb.TransactWriteItem{
+				&dynamodb.TransactWriteItem{
+					Update: &dynamodb.Update{
+						TableName: &c.TableName,
+						Key: map[string]*dynamodb.AttributeValue{
+							"id": {
+								S: aws.String(c.Id),
+							},
 						},
-					},
-					UpdateExpression: aws.String("set age = age + :age_increment_value, version = version + :version_increment_value, stock = stock - :stock_decrement_value"),
-					// ReturnValues:     aws.String("ALL_NEW"),
-					ConditionExpression: aws.String("stock > :stock_min_value"),
-					ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-						":age_increment_value": {
-							N: aws.String("1"),
+						UpdateExpression: aws.String("set age = age + :age_increment_value, version = version + :version_increment_value, stock = stock - :stock_decrement_value"),
+						// ReturnValues:     aws.String("ALL_NEW"),
+						ConditionExpression: aws.String("stock > :stock_min_value"),
+						ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+							":age_increment_value": {
+								N: aws.String("1"),
+							},
+							":version_increment_value": {
+								N: aws.String("1"),
+							},
+							":stock_decrement_value": {
+								N: aws.String("1"),
+							},
+							":stock_min_value": {
+								N: aws.String("0"),
+							},
+							// ":age_max_value": {
+							// 	N: aws.String(strconv.Itoa(c.Condition)),
+							// },
 						},
-						":version_increment_value": {
-							N: aws.String("1"),
-						},
-						":stock_decrement_value": {
-							N: aws.String("1"),
-						},
-						":stock_min_value": {
-							N: aws.String("0"),
-						},
-						// ":age_max_value": {
-						// 	N: aws.String(strconv.Itoa(c.Condition)),
-						// },
 					},
 				},
 			},
-		},
-		ClientRequestToken: aws.String(clientRequestToken),
+			ClientRequestToken: aws.String(clientRequestToken),
+		}
 	}
 	for i := 1; i <= c.NumCalls; i++ {
 		//if c.Verbose {
 		//	fmt.Printf("[Verbose] Mssage: PartitionKey %s Data %s\n", c.PartitionKey, message)
 		//}
 		err := retry(c.RetryNum, 2*time.Second, func() (err error) {
-			_, derr := db.TransactWriteItems(twii)
+			_, derr := db.TransactWriteItems(twii(i))
 			if c.Verbose {
 				item := Item{}
 				// UpdateItemInput -> Updateに変えたことで取得できなくなっている部分を一旦コメントアウト
