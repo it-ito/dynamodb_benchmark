@@ -24,7 +24,7 @@ var usageText = `auto_increment [options...]
 
 Options:
 -a <action>          (Required) An action to execute
-                     Defaults to "read"; Must be either "read" or "write-condition" or "write-condition-with-get"
+                     Defaults to "read"; Must be either "read" or "write-condition" or "write-condition-with-get" or "write-transaction"
 -table <table>       (Required) DynamoDB table name
 -id <id>             (Required) id field value in the table
 -condition <max-age> Conditinal check value of max age on updating "age" field in the table
@@ -41,6 +41,8 @@ Options:
 -verbose             Verbose option
 -h                   help message
 `
+
+var unixTime = time.Now().Unix()
 
 type DynamoDBBenchmark struct {
 	Action      string
@@ -103,6 +105,8 @@ func (c *DynamoDBBenchmark) Run() {
 			go c.startReadWorker(i, &wg, &successCount, &errorCount, &successGetCount, &errorGetCount)
 		} else if c.Action == "write-condition"{
 			go c.startWriteWorker(i, &wg, &successCount, &errorCount)
+		} else if c.Action == "write-transaction"{
+			go c.startWriteWorkerTransaction(i, &wg, &successCount, &errorCount)
 		} else {
 			go c.startWriteWorkerCondition(i, &wg, &successCount, &errorCount, &successGetCount, &errorGetCount)
 		}
@@ -206,6 +210,79 @@ func (c *DynamoDBBenchmark) startWriteWorkerCondition(id int, wg *sync.WaitGroup
 
 		if err != nil {
 			// fmt.Printf("Error: %v\n", err)
+			atomic.AddUint32(errorCount, 1)
+			continue
+		}
+
+		atomic.AddUint32(successCount, 1)
+	}
+}
+
+func (c *DynamoDBBenchmark) startWriteWorkerTransaction(id int, wg *sync.WaitGroup, successCount *uint32, errorCount *uint32) {
+	defer wg.Done()
+
+	db := getDynamoDBClient(c.EndpointUrl)
+
+	twii := func(i int) *dynamodb.TransactWriteItemsInput {
+		clientRequestToken := strconv.FormatInt(unixTime, 10) + "_" + strconv.Itoa(id) + "_" + strconv.Itoa(i)
+		return &dynamodb.TransactWriteItemsInput{
+			TransactItems: []*dynamodb.TransactWriteItem{
+				&dynamodb.TransactWriteItem{
+					Update: &dynamodb.Update{
+						TableName: &c.TableName,
+						Key: map[string]*dynamodb.AttributeValue{
+							"id": {
+								S: aws.String(c.Id),
+							},
+						},
+						UpdateExpression: aws.String("set age = age - :age_decrement_value, ver = ver + :ver_increment_value"),
+
+						// ReturnValues:     aws.String("ALL_NEW"),
+						ConditionExpression: aws.String("age > :age_min_value"),
+						ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+							":age_decrement_value": {
+								N: aws.String("1"),
+							},
+							":ver_increment_value": {
+								N: aws.String("1"),
+							},
+							":age_min_value": {
+								N: aws.String("0"),
+							},
+							// ":age_max_value": {
+							// 	N: aws.String(strconv.Itoa(c.Condition)),
+							// },
+						},
+					},
+				},
+			},
+			ClientRequestToken: aws.String(clientRequestToken),
+		}
+	}
+	for i := 1; i <= c.NumCalls; i++ {
+		//if c.Verbose {
+		//	fmt.Printf("[Verbose] Mssage: PartitionKey %s Data %s\n", c.PartitionKey, message)
+		//}
+		err := retry(c.RetryNum, 2*time.Second, func() (err error) {
+			_, derr := db.TransactWriteItems(twii(i))
+			if c.Verbose {
+				item := Item{}
+				// UpdateItemInput -> Updateに変えたことで取得できなくなっている部分を一旦コメントアウト
+				// derr := dynamodbattribute.UnmarshalMap(dresp.Attributes, &item)
+				if derr != nil {
+				// 	fmt.Printf("Got error unmarshalling: %s", derr)
+					return derr
+				}
+				fmt.Printf("[Verbose] DynamoDB UpdateImte Response: id %s age %d %v\n", item.Id, item.Age, time.Now())
+			}
+			return derr
+		})
+
+		if err != nil {
+			// 在庫0件になってからのconditional error は表示しない
+			// if !strings.Contains(err.Error(), "The conditional request failed") {
+				fmt.Printf("Error: %v\n", err)
+			// }
 			atomic.AddUint32(errorCount, 1)
 			continue
 		}
