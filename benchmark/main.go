@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 	"strings"
+	"math/rand"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -19,6 +20,15 @@ import (
 func usage() {
 	fmt.Println(usageText)
 	os.Exit(0)
+}
+
+func RandomString(n int) string {
+    var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+    s := make([]rune, n)
+    for i := range s {
+        s[i] = letters[rand.Intn(len(letters))]
+    }
+    return string(s)
 }
 
 var usageText = `auto_increment [options...]
@@ -232,8 +242,7 @@ func (c *DynamoDBBenchmark) startWriteWorkerTransaction(id int, partitionkey str
 
 	db := getDynamoDBClient(c.EndpointUrl)
 
-	twii := func(i int) *dynamodb.TransactWriteItemsInput {
-		clientRequestToken := strconv.FormatInt(unixTime, 10) + "_" + strconv.Itoa(id) + "_" + strconv.Itoa(i)
+	twii := func(i int, clientRequestToken string) *dynamodb.TransactWriteItemsInput {
 		return &dynamodb.TransactWriteItemsInput{
 			TransactItems: []*dynamodb.TransactWriteItem{
 				&dynamodb.TransactWriteItem{
@@ -273,16 +282,14 @@ func (c *DynamoDBBenchmark) startWriteWorkerTransaction(id int, partitionkey str
 		//	fmt.Printf("[Verbose] Mssage: PartitionKey %s Data %s\n", c.PartitionKey, message)
 		//}
 		err := retry(c.RetryNum, 2*time.Second, func() (err error) {
-			_, derr := db.TransactWriteItems(twii(i))
+			clientRequestToken := strconv.FormatInt(unixTime, 10) + "_" + strconv.Itoa(id) + "_" + strconv.Itoa(i) + "_" + RandomString(10)
+			_, derr := db.TransactWriteItems(twii(i, clientRequestToken))
 			if c.Verbose {
-				item := Item{}
 				// UpdateItemInput -> Updateに変えたことで取得できなくなっている部分を一旦コメントアウト
-				// derr := dynamodbattribute.UnmarshalMap(dresp.Attributes, &item)
 				if derr != nil {
-				// 	fmt.Printf("Got error unmarshalling: %s", derr)
 					return derr
 				}
-				fmt.Printf("[Verbose] DynamoDB UpdateImte Response: id %s age %d %v\n", item.Id, item.Age, time.Now())
+				fmt.Printf("[Verbose] DynamoDB UpdateImte clientRequestToken: %s %v\n", clientRequestToken, time.Now())
 			}
 			return derr
 		})
@@ -421,7 +428,7 @@ func main() {
 	flag.Usage = usage
 	flag.Parse()
 
-	if action != "read" && action != "write" {
+	if action != "read" && action != "write" && action != "write-transaction" {
 		fmt.Println("[ERROR] Invalid Command Options (-a)! action value must either read or write")
 	}
 	if tableName == "" || id == "" {
