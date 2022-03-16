@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -99,16 +100,24 @@ func (c *DynamoDBBenchmark) Run() {
 	startTime := time.Now()
 
 	var wg sync.WaitGroup
+	ids := strings.Split(c.Id, ",")
+	numOfIds := len(ids)
+	partitionkey := c.Id
+
 	for i := 1; i <= c.Connections; i++ {
+		if numOfIds > 1{
+			partitionkey = ids[i % numOfIds]
+		}
+
 		wg.Add(1)
 		if c.Action == "read" {
-			go c.startReadWorker(i, &wg, &successCount, &errorCount, &successGetCount, &errorGetCount)
+			go c.startReadWorker(i, partitionkey, &wg, &successCount, &errorCount, &successGetCount, &errorGetCount)
 		} else if c.Action == "write-condition"{
-			go c.startWriteWorker(i, &wg, &successCount, &errorCount)
+			go c.startWriteWorker(i, partitionkey, &wg, &successCount, &errorCount)
 		} else if c.Action == "write-transaction"{
-			go c.startWriteWorkerTransaction(i, &wg, &successCount, &errorCount)
+			go c.startWriteWorkerTransaction(i, partitionkey, &wg, &successCount, &errorCount)
 		} else {
-			go c.startWriteWorkerCondition(i, &wg, &successCount, &errorCount, &successGetCount, &errorGetCount)
+			go c.startWriteWorkerCondition(i, partitionkey, &wg, &successCount, &errorCount, &successGetCount, &errorGetCount)
 		}
 	}
 	wg.Wait()
@@ -128,7 +137,7 @@ func (c *DynamoDBBenchmark) Run() {
 	fmt.Printf("Average (ms): %v\n", average_ms)
 }
 
-func (c *DynamoDBBenchmark) startWriteWorkerCondition(id int, wg *sync.WaitGroup, successCount *uint32, errorCount *uint32, successGetCount *uint32, errorGetCount *uint32) {
+func (c *DynamoDBBenchmark) startWriteWorkerCondition(id int, partitionkey string, wg *sync.WaitGroup, successCount *uint32, errorCount *uint32, successGetCount *uint32, errorGetCount *uint32) {
 	defer wg.Done()
 
 	db := getDynamoDBClient(c.EndpointUrl)
@@ -137,7 +146,7 @@ func (c *DynamoDBBenchmark) startWriteWorkerCondition(id int, wg *sync.WaitGroup
 		TableName: &c.TableName,
 		Key: map[string]*dynamodb.AttributeValue{
 			"id": {
-				S: aws.String(c.Id),
+				S: aws.String(partitionkey),
 			},
 		},
 		UpdateExpression: aws.String("set age = age - :age_decrement_value, ver = ver + :ver_increment_value"),
@@ -147,7 +156,7 @@ func (c *DynamoDBBenchmark) startWriteWorkerCondition(id int, wg *sync.WaitGroup
 		TableName: &c.TableName,
 		Key: map[string]*dynamodb.AttributeValue{
 			"id": {
-				S: aws.String(c.Id),
+				S: aws.String(partitionkey),
 			},
 		},
 	}
@@ -218,7 +227,7 @@ func (c *DynamoDBBenchmark) startWriteWorkerCondition(id int, wg *sync.WaitGroup
 	}
 }
 
-func (c *DynamoDBBenchmark) startWriteWorkerTransaction(id int, wg *sync.WaitGroup, successCount *uint32, errorCount *uint32) {
+func (c *DynamoDBBenchmark) startWriteWorkerTransaction(id int, partitionkey string, wg *sync.WaitGroup, successCount *uint32, errorCount *uint32) {
 	defer wg.Done()
 
 	db := getDynamoDBClient(c.EndpointUrl)
@@ -232,7 +241,7 @@ func (c *DynamoDBBenchmark) startWriteWorkerTransaction(id int, wg *sync.WaitGro
 						TableName: &c.TableName,
 						Key: map[string]*dynamodb.AttributeValue{
 							"id": {
-								S: aws.String(c.Id),
+								S: aws.String(partitionkey),
 							},
 						},
 						UpdateExpression: aws.String("set age = age - :age_decrement_value, ver = ver + :ver_increment_value"),
@@ -291,7 +300,7 @@ func (c *DynamoDBBenchmark) startWriteWorkerTransaction(id int, wg *sync.WaitGro
 	}
 }
 
-func (c *DynamoDBBenchmark) startReadWorker(id int, wg *sync.WaitGroup, successCount *uint32, errorCount *uint32, successGetCount *uint32, errorGetCount *uint32) {
+func (c *DynamoDBBenchmark) startReadWorker(id int, partitionkey string, wg *sync.WaitGroup, successCount *uint32, errorCount *uint32, successGetCount *uint32, errorGetCount *uint32) {
 	defer wg.Done()
 
 	db := getDynamoDBClient(c.EndpointUrl)
@@ -300,7 +309,7 @@ func (c *DynamoDBBenchmark) startReadWorker(id int, wg *sync.WaitGroup, successC
 		TableName: &c.TableName,
 		Key: map[string]*dynamodb.AttributeValue{
 			"id": {
-				S: aws.String(c.Id),
+				S: aws.String(partitionkey),
 			},
 		},
 	}
@@ -329,7 +338,7 @@ func (c *DynamoDBBenchmark) startReadWorker(id int, wg *sync.WaitGroup, successC
 	}
 }
 
-func (c *DynamoDBBenchmark) startWriteWorker(id int, wg *sync.WaitGroup, successCount *uint32, errorCount *uint32) {
+func (c *DynamoDBBenchmark) startWriteWorker(id int, partitionkey string, wg *sync.WaitGroup, successCount *uint32, errorCount *uint32) {
 	defer wg.Done()
 
 	db := getDynamoDBClient(c.EndpointUrl)
@@ -338,7 +347,7 @@ func (c *DynamoDBBenchmark) startWriteWorker(id int, wg *sync.WaitGroup, success
 		TableName: &c.TableName,
 		Key: map[string]*dynamodb.AttributeValue{
 			"id": {
-				S: aws.String(c.Id),
+				S: aws.String(partitionkey),
 			},
 		},
 		UpdateExpression: aws.String("set age = age - :age_decrement_value, ver = ver + :ver_increment_value"),
