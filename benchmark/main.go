@@ -9,7 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 	"strings"
-	"math/rand"
+	"crypto/rand"
+	"encoding/base32"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -22,13 +23,13 @@ func usage() {
 	os.Exit(0)
 }
 
-func RandomString(n int) string {
-    var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-    s := make([]rune, n)
-    for i := range s {
-        s[i] = letters[rand.Intn(len(letters))]
+func getToken(length int) string {
+    randomBytes := make([]byte, 32)
+    _, err := rand.Read(randomBytes)
+    if err != nil {
+        panic(err)
     }
-    return string(s)
+    return base32.StdEncoding.EncodeToString(randomBytes)[:length]
 }
 
 var usageText = `auto_increment [options...]
@@ -282,7 +283,7 @@ func (c *DynamoDBBenchmark) startWriteWorkerTransaction(id int, partitionkey str
 		//	fmt.Printf("[Verbose] Mssage: PartitionKey %s Data %s\n", c.PartitionKey, message)
 		//}
 		err := retry(c.RetryNum, 2*time.Second, func() (err error) {
-			clientRequestToken := strconv.FormatInt(unixTime, 10) + "_" + strconv.Itoa(id) + "_" + strconv.Itoa(i) + "_" + RandomString(10)
+			clientRequestToken := strconv.FormatInt(unixTime, 10) + "_" + strconv.Itoa(id) + "_" + strconv.Itoa(i) + "_" + getToken(10)
 			_, derr := db.TransactWriteItems(twii(i, clientRequestToken))
 			if c.Verbose {
 				// UpdateItemInput -> Updateに変えたことで取得できなくなっている部分を一旦コメントアウト
